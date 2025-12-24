@@ -186,7 +186,7 @@ class ModelCheckpoint:
     def load_best(self, model: nn.Module) -> nn.Module:
         """Load the best checkpoint."""
         if self.best_path and self.best_path.exists():
-            checkpoint = torch.load(self.best_path)
+            checkpoint = torch.load(self.best_path, weights_only=False)
             model.load_state_dict(checkpoint['model_state_dict'])
             print(f"Loaded best checkpoint from {self.best_path}")
         return model
