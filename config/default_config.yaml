@@ -1,0 +1,87 @@
+# S3Rec with Low-rank AAP Configuration
+# =====================================
+
+# Model Architecture
+model:
+  hidden_size: 64              # Embedding and hidden layer dimension
+  num_layers: 2                # Number of Transformer layers
+  num_heads: 2                 # Number of attention heads
+  dropout: 0.2                 # Dropout probability
+  hidden_act: "gelu"           # Activation function (gelu, relu, swish)
+  initializer_range: 0.02      # Weight initialization range
+  
+# Low-rank AAP Configuration (CRITICAL)
+lowrank:
+  enabled: true                # Enable low-rank factorization
+  rank: 16                     # Low-rank dimension r << hidden_size
+  use_bias: false              # Use bias in low-rank layers
+  
+# Sequence Configuration
+sequence:
+  max_length: 50               # Maximum sequence length
+  mask_ratio: 0.2              # Masking ratio for pre-training
+
+# Pre-training Configuration
+pretrain:
+  epochs: 100                  # Number of pre-training epochs
+  batch_size: 256              # Batch size for pre-training
+  learning_rate: 0.001         # Learning rate
+  weight_decay: 0.0            # L2 regularization
+  adam_beta1: 0.9              # Adam beta1
+  adam_beta2: 0.999            # Adam beta2
+  
+  # Loss weights (from S3Rec paper)
+  aap_weight: 1.0              # Associated Attribute Prediction weight
+  mip_weight: 0.2              # Masked Item Prediction weight  
+  map_weight: 1.0              # Masked Attribute Prediction weight
+  sp_weight: 0.5               # Segment Prediction weight
+  
+  # Checkpoint and logging
+  save_every: 10               # Save checkpoint every N epochs
+  log_freq: 1                  # Log every N epochs
+  patience: 20                 # Early stopping patience
+
+# Fine-tuning Configuration
+finetune:
+  epochs: 50                   # Number of fine-tuning epochs
+  batch_size: 256              # Batch size for fine-tuning
+  learning_rate: 0.001         # Learning rate
+  weight_decay: 0.0            # L2 regularization
+  adam_beta1: 0.9              # Adam beta1
+  adam_beta2: 0.999            # Adam beta2
+  log_freq: 1                  # Log every N epochs
+  patience: 10                 # Early stopping patience
+
+# Data Configuration
+data:
+  dataset: "Beauty"            # Dataset name
+  data_dir: "data/processed"   # Processed data directory
+  raw_dir: "data/raw"          # Raw data directory
+  user_core: 5                 # Minimum interactions per user
+  item_core: 5                 # Minimum interactions per item
+  attribute_core: 0            # Minimum items per attribute
+  
+# Evaluation Configuration
+evaluation:
+  metrics: ["hit@1", "hit@5", "hit@10", "ndcg@5", "ndcg@10", "mrr"]
+  sample_size: 99              # Number of negative samples for evaluation
+  full_sort: false             # Use full item ranking (slower but more accurate)
+  
+# Hardware Configuration
+hardware:
+  device: "auto"               # auto, cuda, cpu
+  num_workers: 4               # DataLoader workers
+  seed: 42                     # Random seed for reproducibility
+
+# Logging Configuration
+logging:
+  use_tensorboard: true        # Enable TensorBoard logging
+  use_wandb: false             # Enable Weights & Biases logging
+  log_dir: "results/logs"      # Log directory
+  
+# Output Configuration
+output:
+  results_dir: "results"       # Results directory
+  checkpoint_dir: "results/checkpoints"  # Checkpoint directory
+  figures_dir: "results/figures"         # Figures directory
+

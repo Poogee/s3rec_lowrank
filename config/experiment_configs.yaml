@@ -1,0 +1,101 @@
+# Experiment Configurations for S3Rec Low-rank AAP
+# =================================================
+
+# Baseline: Standard S3Rec (full-rank AAP)
+baseline:
+  name: "S3Rec-Baseline"
+  description: "Standard S3Rec with full-rank d×d AAP matrix"
+  lowrank:
+    enabled: false
+    
+# Low-rank experiments with different ranks
+lowrank_r8:
+  name: "S3Rec-LowRank-r8"
+  description: "S3Rec with low-rank AAP (r=8)"
+  lowrank:
+    enabled: true
+    rank: 8
+
+lowrank_r16:
+  name: "S3Rec-LowRank-r16"
+  description: "S3Rec with low-rank AAP (r=16)"
+  lowrank:
+    enabled: true
+    rank: 16
+
+lowrank_r32:
+  name: "S3Rec-LowRank-r32"
+  description: "S3Rec with low-rank AAP (r=32)"
+  lowrank:
+    enabled: true
+    rank: 32
+
+lowrank_r64:
+  name: "S3Rec-LowRank-r64"
+  description: "S3Rec with low-rank AAP (r=64)"
+  lowrank:
+    enabled: true
+    rank: 64
+
+# Ablation: AAP only (no MIP, MAP, SP)
+ablation_aap_only:
+  name: "S3Rec-AAP-Only"
+  description: "Pre-training with AAP loss only"
+  pretrain:
+    aap_weight: 1.0
+    mip_weight: 0.0
+    map_weight: 0.0
+    sp_weight: 0.0
+
+# Ablation: No AAP
+ablation_no_aap:
+  name: "S3Rec-No-AAP"
+  description: "Pre-training without AAP loss"
+  pretrain:
+    aap_weight: 0.0
+    mip_weight: 0.2
+    map_weight: 1.0
+    sp_weight: 0.5
+
+# Ablation: AAP + MAP (attribute-focused)
+ablation_attribute_focus:
+  name: "S3Rec-Attribute-Focus"
+  description: "Pre-training with AAP and MAP only"
+  pretrain:
+    aap_weight: 1.0
+    mip_weight: 0.0
+    map_weight: 1.0
+    sp_weight: 0.0
+
+# Ablation: MIP + SP (sequence-focused)
+ablation_sequence_focus:
+  name: "S3Rec-Sequence-Focus"
+  description: "Pre-training with MIP and SP only"
+  pretrain:
+    aap_weight: 0.0
+    mip_weight: 0.2
+    map_weight: 0.0
+    sp_weight: 0.5
+
+# Hidden size experiments
+hidden_32:
+  name: "S3Rec-Hidden32"
+  model:
+    hidden_size: 32
+  lowrank:
+    rank: 8
+
+hidden_128:
+  name: "S3Rec-Hidden128"
+  model:
+    hidden_size: 128
+  lowrank:
+    rank: 32
+
+# Deeper model
+deeper:
+  name: "S3Rec-Deeper"
+  model:
+    num_layers: 4
+    num_heads: 4
+
