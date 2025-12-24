@@ -16,7 +16,10 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from .callbacks import EarlyStopping, ModelCheckpoint, TensorBoardLogger, MetricsTracker
-from ..utils.metrics import compute_metrics
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.metrics import compute_metrics
 
 
 class FinetuneTrainer:

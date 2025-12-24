@@ -95,12 +95,19 @@ def load_amazon_metadata(file_path: str, valid_items: Set[str]) -> Dict[str, Dic
     with open(file_path, 'r', encoding='utf-8') as f:
         for line in tqdm(f, desc="Loading metadata"):
             try:
-                info = json.loads(line.strip())
+                # Try JSON first, then Python dict format
+                line = line.strip()
+                try:
+                    info = json.loads(line)
+                except json.JSONDecodeError:
+                    # Handle Python dict format (single quotes)
+                    info = eval(line)
+                
                 asin = info.get('asin')
                 
                 if asin and asin in valid_items:
                     metadata[asin] = info
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, SyntaxError, ValueError):
                 continue
                 
     return metadata
@@ -314,8 +321,11 @@ def extract_attributes(
     num_attributes = len(attribute2id) + 1  # +1 for padding
     
     print(f"Attributes after filtering: {len(attribute2id)}")
-    print(f"Avg attributes per item: {np.mean(attribute_lens):.2f}")
-    print(f"Min/Max attributes: {np.min(attribute_lens)}/{np.max(attribute_lens)}")
+    if attribute_lens:
+        print(f"Avg attributes per item: {np.mean(attribute_lens):.2f}")
+        print(f"Min/Max attributes: {np.min(attribute_lens)}/{np.max(attribute_lens)}")
+    else:
+        print("Warning: No attributes found for items")
     
     return item2attributes, num_attributes, attribute2id
 
