@@ -156,6 +156,341 @@ $ "logits" = h_i dot (U dot V^T) dot E_"attr"^T = (h_i dot U) dot (V^T dot E_"at
   caption: [Сравнение количества параметров]
 )
 
+= Математическое описание модели
+
+В данном разделе представлено детальное математическое описание архитектуры S3Rec с низкоранговой аппроксимацией AAP.
+
+== Формальная постановка задачи
+
+=== Последовательные рекомендации
+
+Пусть $cal(U) = {u_1, u_2, ..., u_(|cal(U)|)}$ — множество пользователей, $cal(V) = {v_1, v_2, ..., v_(|cal(V)|)}$ — множество товаров, $cal(A) = {a_1, a_2, ..., a_(|cal(A)|)}$ — множество атрибутов.
+
+Для каждого пользователя $u in cal(U)$ имеется хронологически упорядоченная последовательность взаимодействий:
+
+$ S_u = [v_1^u, v_2^u, ..., v_(|S_u|)^u] $
+
+где $v_t^u in cal(V)$ — товар, с которым пользователь $u$ взаимодействовал в момент времени $t$.
+
+*Задача*: Предсказать следующий товар $v_(|S_u|+1)^u$, с которым пользователь $u$ взаимодействует, на основе истории $S_u$.
+
+=== Атрибуты товаров
+
+Каждый товар $v in cal(V)$ ассоциирован с подмножеством атрибутов $cal(A)_v subset.eq cal(A)$. Определим бинарную матрицу связей:
+
+$ M in {0,1}^(|cal(V)| times |cal(A)|), quad M_(v,a) = cases(
+  1 & "если" a in cal(A)_v,
+  0 & "иначе"
+) $
+
+== Слой эмбеддингов
+
+=== Эмбеддинги товаров
+
+Определим матрицу эмбеддингов товаров $bold(E)_V in RR^((|cal(V)|+1) times d)$, где $d$ — размерность скрытого пространства. Дополнительная строка для индекса 0 (padding/mask token).
+
+Для последовательности $S = [v_1, ..., v_n]$ получаем:
+
+$ bold(E)_S = [bold(e)_(v_1); bold(e)_(v_2); ...; bold(e)_(v_n)] in RR^(n times d) $
+
+где $bold(e)_(v_i) = bold(E)_V [v_i] in RR^d$ — эмбеддинг товара $v_i$.
+
+=== Позиционные эмбеддинги
+
+Для учёта порядка элементов используются обучаемые позиционные эмбеддинги:
+
+$ bold(P) in RR^(L_max times d) $
+
+где $L_max$ — максимальная длина последовательности.
+
+Итоговое входное представление:
+
+$ bold(H)^((0)) = bold(E)_S + bold(P)_(1:n) $
+
+=== Эмбеддинги атрибутов
+
+Матрица эмбеддингов атрибутов:
+
+$ bold(E)_A in RR^(|cal(A)| times d) $
+
+где $bold(e)_a = bold(E)_A [a] in RR^d$ — эмбеддинг атрибута $a$.
+
+== Архитектура Transformer Encoder
+
+=== Multi-Head Self-Attention
+
+Механизм внимания для последовательности $bold(H) in RR^(n times d)$:
+
+$ "Attention"(bold(Q), bold(K), bold(V)) = "softmax"((bold(Q) bold(K)^T) / sqrt(d_k)) bold(V) $
+
+где:
+- $bold(Q) = bold(H) bold(W)^Q$ — запросы (queries)
+- $bold(K) = bold(H) bold(W)^K$ — ключи (keys)  
+- $bold(V) = bold(H) bold(W)^V$ — значения (values)
+- $bold(W)^Q, bold(W)^K, bold(W)^V in RR^(d times d_k)$ — обучаемые проекции
+- $d_k = d / h$ — размерность одной головы
+- $h$ — количество голов внимания
+
+Multi-head attention объединяет $h$ независимых механизмов внимания:
+
+$ "MultiHead"(bold(H)) = "Concat"("head"_1, ..., "head"_h) bold(W)^O $
+
+$ "head"_i = "Attention"(bold(H) bold(W)_i^Q, bold(H) bold(W)_i^K, bold(H) bold(W)_i^V) $
+
+где $bold(W)^O in RR^(d times d)$ — выходная проекция.
+
+=== Маскирование для авторегрессии
+
+При fine-tuning используется каузальная маска для предотвращения "подглядывания" в будущее:
+
+$ bold(M)_"causal" in RR^(n times n), quad bold(M)_"causal"[i,j] = cases(
+  0 & "если" j <= i,
+  -infinity & "если" j > i
+) $
+
+Модифицированное внимание:
+
+$ "MaskedAttention"(bold(Q), bold(K), bold(V)) = "softmax"((bold(Q) bold(K)^T) / sqrt(d_k) + bold(M)_"causal") bold(V) $
+
+=== Position-wise Feed-Forward Network
+
+После слоя внимания применяется двухслойная полносвязная сеть:
+
+$ "FFN"(bold(x)) = max(0, bold(x) bold(W)_1 + bold(b)_1) bold(W)_2 + bold(b)_2 $
+
+где:
+- $bold(W)_1 in RR^(d times d_"ff")$, $bold(b)_1 in RR^(d_"ff")$
+- $bold(W)_2 in RR^(d_"ff" times d)$, $bold(b)_2 in RR^d$
+- $d_"ff" = 4d$ — размерность скрытого слоя FFN
+
+=== Слой Transformer
+
+Полный слой Transformer с остаточными связями и Layer Normalization:
+
+$ bold(H)' = "LayerNorm"(bold(H) + "MultiHead"(bold(H))) $
+$ bold(H)^"out" = "LayerNorm"(bold(H)' + "FFN"(bold(H)')) $
+
+Layer Normalization для вектора $bold(x) in RR^d$:
+
+$ "LayerNorm"(bold(x)) = gamma dot.circle (bold(x) - mu) / sqrt(sigma^2 + epsilon) + beta $
+
+где $mu = 1/d sum_i x_i$, $sigma^2 = 1/d sum_i (x_i - mu)^2$, а $gamma, beta in RR^d$ — обучаемые параметры.
+
+=== Стек энкодера
+
+Модель использует $L$ последовательных слоёв Transformer:
+
+$ bold(H)^((l)) = "TransformerLayer"_l (bold(H)^((l-1))), quad l = 1, ..., L $
+
+Финальное представление последовательности: $bold(H) = bold(H)^((L)) in RR^(n times d)$.
+
+== Задачи предобучения: детальное описание
+
+=== Associated Attribute Prediction (AAP)
+
+*Цель*: Научить модель предсказывать атрибуты товара по его эмбеддингу.
+
+*Входные данные*: Эмбеддинг товара $bold(e)_v in RR^d$ и множество его атрибутов $cal(A)_v$.
+
+*Вычисление*:
+
+$ bold(z)_"AAP" = bold(e)_v bold(W)_"AAP" in RR^d $
+
+$ hat(y)_a = sigma(bold(z)_"AAP" dot bold(e)_a) = sigma(bold(e)_v bold(W)_"AAP" bold(e)_a^T) $
+
+где $bold(W)_"AAP" in RR^(d times d)$ — матрица весов AAP, $sigma(x) = 1/(1+e^(-x))$ — сигмоида.
+
+*Функция потерь* (Binary Cross-Entropy):
+
+$ cal(L)_"AAP" = -1/(|cal(V)| dot |cal(A)|) sum_(v in cal(V)) sum_(a in cal(A)) [y_(v,a) log hat(y)_a + (1-y_(v,a)) log(1-hat(y)_a)] $
+
+где $y_(v,a) = M_(v,a) in {0,1}$ — ground truth.
+
+=== Низкоранговая аппроксимация AAP (Low-rank AAP)
+
+*Ключевая идея*: Заменить полноранговую матрицу $bold(W)_"AAP" in RR^(d times d)$ на произведение двух низкоранговых матриц:
+
+$ bold(W)_"AAP" approx bold(U) bold(V)^T $
+
+где $bold(U), bold(V) in RR^(d times r)$ и $r << d$ — ранг аппроксимации.
+
+*Вычисление логитов*:
+
+$ hat(y)_a = sigma(bold(e)_v bold(U) bold(V)^T bold(e)_a^T) = sigma((bold(e)_v bold(U)) dot (bold(V)^T bold(e)_a^T)) $
+
+*Вычислительная эффективность*:
+
+Для батча из $B$ товаров и $M$ атрибутов:
+
+#figure(
+  table(
+    columns: (auto, auto, auto),
+    align: (left, center, center),
+    stroke: 0.5pt,
+    inset: 8pt,
+    [*Операция*], [*Full-rank*], [*Low-rank*],
+    [Вычисление], [$O(B dot d^2 + B dot M dot d)$], [$O(B dot d dot r + M dot d dot r + B dot M dot r)$],
+    [Память (параметры)], [$d^2$], [$2 dot d dot r$],
+  ),
+  caption: [Сравнение вычислительной сложности]
+)
+
+При $r = d/4$ получаем 50% экономию памяти и ускорение вычислений.
+
+*Связь с SVD*:
+
+Низкоранговая факторизация эквивалентна усечённому сингулярному разложению (truncated SVD):
+
+$ bold(W)_"AAP" approx bold(U)_r bold(Sigma)_r bold(V)_r^T $
+
+где используются только $r$ наибольших сингулярных значений. Наша параметризация $bold(U) bold(V)^T$ неявно обучает это разложение.
+
+*Теорема Эккарта-Янга*: Усечённое SVD даёт оптимальную аппроксимацию в смысле нормы Фробениуса:
+
+$ min_(bold(W)': "rank"(bold(W)') <= r) ||bold(W) - bold(W)'||_F = ||bold(W) - bold(U)_r bold(Sigma)_r bold(V)_r^T||_F $
+
+=== Masked Item Prediction (MIP)
+
+*Цель*: Восстановить замаскированные товары в последовательности (аналог BERT MLM).
+
+*Процедура маскирования*: Для последовательности $S = [v_1, ..., v_n]$ случайно выбираем $rho dot n$ позиций (обычно $rho = 0.2$) и заменяем их на специальный токен `[MASK]`.
+
+*Вычисление*: Для замаскированной позиции $t$ получаем контекстное представление $bold(h)_t in RR^d$ из Transformer encoder.
+
+$ bold(z)_"MIP" = bold(h)_t bold(W)_"MIP" in RR^d $
+
+*Функция потерь* (InfoNCE / Contrastive):
+
+$ cal(L)_"MIP" = -sum_(t in cal(M)) [log sigma(bold(z)_"MIP" dot bold(e)_(v_t)) + log(1 - sigma(bold(z)_"MIP" dot bold(e)_(v_t^-)))] $
+
+где:
+- $cal(M)$ — множество замаскированных позиций
+- $v_t$ — истинный товар на позиции $t$
+- $v_t^-$ — отрицательный сэмпл (случайный товар)
+
+=== Masked Attribute Prediction (MAP)
+
+*Цель*: Предсказать атрибуты замаскированных товаров по контексту.
+
+*Вычисление*:
+
+$ hat(bold(y))_"MAP" = sigma(bold(h)_t bold(W)_"MAP") in RR^(|cal(A)|) $
+
+где $bold(W)_"MAP" in RR^(d times |cal(A)|)$ — матрица весов.
+
+*Функция потерь*:
+
+$ cal(L)_"MAP" = -1/(|cal(M)| dot |cal(A)|) sum_(t in cal(M)) sum_(a in cal(A)) [y_(v_t,a) log hat(y)_a + (1-y_(v_t,a)) log(1-hat(y)_a)] $
+
+=== Segment Prediction (SP)
+
+*Цель*: Различать сегменты последовательности одного пользователя от случайных сегментов.
+
+*Процедура*: Разбиваем последовательность на два сегмента $S_1, S_2$. Создаём:
+- Положительную пару: $(S_1, S_2)$ от одного пользователя
+- Отрицательную пару: $(S_1, S_2^-)$ где $S_2^-$ — сегмент другого пользователя
+
+*Вычисление*:
+
+$ bold(s)_1 = 1/|S_1| sum_(t in S_1) bold(h)_t, quad bold(s)_2 = 1/|S_2| sum_(t in S_2) bold(h)_t $
+
+$ bold(z)_"SP" = bold(s)_1 bold(W)_"SP" in RR^d $
+
+*Функция потерь*:
+
+$ cal(L)_"SP" = -[log sigma(bold(z)_"SP" dot bold(s)_2) + log(1 - sigma(bold(z)_"SP" dot bold(s)_2^-))] $
+
+== Совместная функция потерь предобучения
+
+Полная функция потерь объединяет все четыре задачи:
+
+$ cal(L)_"pretrain" = cal(L)_"AAP" + alpha cal(L)_"MIP" + cal(L)_"MAP" + beta cal(L)_"SP" $
+
+где $alpha, beta > 0$ — гиперпараметры балансировки. По умолчанию $alpha = 0.2$, $beta = 0.5$.
+
+*Обоснование весов*:
+- $alpha = 0.2$ для MIP: Эта задача наиболее близка к финальной задаче рекомендаций
+- $beta = 0.5$ для SP: Важна для моделирования долгосрочных зависимостей
+- AAP и MAP имеют единичные веса как основные задачи корреляции item-attribute
+
+== Fine-tuning: предсказание следующего товара
+
+=== Формулировка задачи
+
+На этапе fine-tuning модель обучается предсказывать следующий товар в последовательности.
+
+*Входные данные*: Последовательность $S = [v_1, ..., v_(n-1)]$
+
+*Целевой товар*: $v_n$ — следующий товар
+
+*Выход модели*: Для каждой позиции $t$ модель выдаёт представление $bold(h)_t$, которое используется для предсказания $v_(t+1)$.
+
+=== Функция потерь (Binary Cross-Entropy с негативным сэмплированием)
+
+$ cal(L)_"finetune" = -sum_(t=1)^(n-1) [log sigma(bold(h)_t dot bold(e)_(v_(t+1))) + sum_(j=1)^K log(1 - sigma(bold(h)_t dot bold(e)_(v_j^-)))] $
+
+где:
+- $v_(t+1)$ — положительный сэмпл (истинный следующий товар)
+- ${v_j^-}_(j=1)^K$ — отрицательные сэмплы (случайные товары)
+- $K$ — количество отрицательных сэмплов (обычно $K=1$ при обучении)
+
+=== Предсказание (Inference)
+
+При тестировании для пользователя с историей $S = [v_1, ..., v_n]$:
+
+1. Получаем представление последней позиции: $bold(h)_n = "Encoder"(S)[-1]$
+
+2. Вычисляем скоры для всех товаров:
+$ s_v = bold(h)_n dot bold(e)_v, quad forall v in cal(V) $
+
+3. Ранжируем товары по убыванию скоров:
+$ hat(cal(R)) = "argsort"(-[s_(v_1), s_(v_2), ..., s_(|cal(V)|)]) $
+
+4. Рекомендуем top-$K$ товаров: $hat(cal(R))_(1:K)$
+
+== Метрики оценки: математические определения
+
+Пусть $r_u$ — ранг истинного товара для пользователя $u$ в списке рекомендаций.
+
+=== Hit Rate \@ K (HR\@K)
+
+$ "HR@K" = 1/|cal(U)| sum_(u in cal(U)) bb(1)[r_u <= K] $
+
+где $bb(1)[dot]$ — индикаторная функция.
+
+=== Normalized Discounted Cumulative Gain \@ K (NDCG\@K)
+
+$ "NDCG@K" = 1/|cal(U)| sum_(u in cal(U)) ("DCG@K"_u) / ("IDCG@K"_u) $
+
+$ "DCG@K"_u = sum_(i=1)^K (2^("rel"_i) - 1) / (log_2(i+1)) $
+
+Для бинарной релевантности (один истинный товар):
+
+$ "NDCG@K"_u = cases(
+  1/(log_2(r_u + 1)) & "если" r_u <= K,
+  0 & "иначе"
+) $
+
+=== Mean Reciprocal Rank (MRR)
+
+$ "MRR" = 1/|cal(U)| sum_(u in cal(U)) 1/r_u $
+
+=== Связь метрик
+
+#figure(
+  table(
+    columns: (auto, auto, auto),
+    align: (left, left, left),
+    stroke: 0.5pt,
+    inset: 8pt,
+    [*Метрика*], [*Диапазон*], [*Интерпретация*],
+    [HR\@K], [$[0, 1]$], [Доля пользователей с релевантным товаром в top-K],
+    [NDCG\@K], [$[0, 1]$], [Качество ранжирования с учётом позиции],
+    [MRR], [$(0, 1]$], [Средняя обратная позиция релевантного товара],
+  ),
+  caption: [Сравнение метрик оценки]
+)
+
 = Реализация
 
 == Структура проекта
