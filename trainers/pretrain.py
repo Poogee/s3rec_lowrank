@@ -53,6 +53,7 @@ class PretrainTrainer:
         self.batch_size = pretrain_config.get('batch_size', 256)
         self.lr = pretrain_config.get('learning_rate', 0.001)
         self.weight_decay = pretrain_config.get('weight_decay', 0.0)
+        self.lowrank_weight_decay = pretrain_config.get('lowrank_weight_decay', None)
         
         # Loss weights
         self.aap_weight = pretrain_config.get('aap_weight', 1.0)
@@ -96,16 +97,51 @@ class PretrainTrainer:
         print(f"Trainable parameters: {trainable_params:,}")
         
     def _setup_optimizer(self):
-        """Setup optimizer with Adam."""
+        """Setup optimizer with Adam.
+        
+        Supports adaptive weight decay: different weight_decay for low-rank parameters
+        (U, V matrices in AAP/MAP heads) and other parameters.
+        """
         adam_beta1 = self.config.get('pretrain', {}).get('adam_beta1', 0.9)
         adam_beta2 = self.config.get('pretrain', {}).get('adam_beta2', 0.999)
         
-        self.optimizer = Adam(
-            self.model.parameters(),
-            lr=self.lr,
-            betas=(adam_beta1, adam_beta2),
-            weight_decay=self.weight_decay
-        )
+        # If lowrank_weight_decay is specified, use parameter groups
+        if self.lowrank_weight_decay is not None and self.lowrank_weight_decay != self.weight_decay:
+            # Separate low-rank parameters from others
+            lowrank_params = []
+            other_params = []
+            
+            for name, param in self.model.named_parameters():
+                if param.requires_grad:
+                    # Check if this is a low-rank parameter (U or V in AAP/MAP heads)
+                    if 'aap_head.U' in name or 'aap_head.V' in name or \
+                       'map_head.U' in name or 'map_head.V' in name:
+                        lowrank_params.append(param)
+                    else:
+                        other_params.append(param)
+            
+            # Create parameter groups with different weight_decay
+            param_groups = [
+                {'params': other_params, 'weight_decay': self.weight_decay},
+                {'params': lowrank_params, 'weight_decay': self.lowrank_weight_decay}
+            ]
+            
+            self.optimizer = Adam(
+                param_groups,
+                lr=self.lr,
+                betas=(adam_beta1, adam_beta2)
+            )
+            
+            print(f"Using adaptive weight decay: {self.weight_decay} (others), "
+                  f"{self.lowrank_weight_decay} (low-rank)")
+        else:
+            # Standard optimizer with single weight_decay
+            self.optimizer = Adam(
+                self.model.parameters(),
+                lr=self.lr,
+                betas=(adam_beta1, adam_beta2),
+                weight_decay=self.weight_decay
+            )
         
     def train(self, dataloader: DataLoader) -> Dict[str, list]:
         """Run pre-training.

@@ -1,0 +1,71 @@
+data:
+  attribute_core: 0
+  data_dir: data/processed
+  dataset: Beauty
+  item_core: 5
+  raw_dir: data/raw
+  user_core: 5
+evaluation:
+  full_sort: false
+  metrics:
+  - hit@1
+  - hit@5
+  - hit@10
+  - ndcg@5
+  - ndcg@10
+  - mrr
+  sample_size: 99
+finetune:
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  batch_size: 256
+  epochs: 50
+  learning_rate: 0.001
+  log_freq: 1
+  lowrank_weight_decay: 0.0
+  patience: 10
+  weight_decay: 0.0
+hardware:
+  device: auto
+  num_workers: 4
+  seed: 42
+logging:
+  log_dir: results/logs
+  use_tensorboard: true
+  use_wandb: false
+lowrank:
+  aap_rank: 16
+  enabled: true
+  init_method: xavier
+  map_rank: 12
+  rank: 16
+  use_bias: false
+model:
+  dropout: 0.2
+  hidden_act: gelu
+  hidden_size: 64
+  initializer_range: 0.02
+  num_heads: 2
+  num_layers: 2
+output:
+  checkpoint_dir: results/checkpoints
+  figures_dir: results/figures
+  results_dir: results
+pretrain:
+  aap_weight: 1.0
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  batch_size: 256
+  epochs: 100
+  learning_rate: 0.001
+  log_freq: 1
+  lowrank_weight_decay: 0.0
+  map_weight: 1.0
+  mip_weight: 0.2
+  patience: 20
+  save_every: 10
+  sp_weight: 0.5
+  weight_decay: 0.0
+sequence:
+  mask_ratio: 0.2
+  max_length: 50

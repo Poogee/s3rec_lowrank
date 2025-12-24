@@ -13,7 +13,10 @@ model:
 # Low-rank AAP Configuration (CRITICAL)
 lowrank:
   enabled: true                # Enable low-rank factorization
-  rank: 16                     # Low-rank dimension r << hidden_size
+  rank: 16                     # Low-rank dimension r << hidden_size (used if aap_rank/map_rank not specified)
+  aap_rank: null               # Low-rank dimension for AAP head (null = use rank above)
+  map_rank: null               # Low-rank dimension for MAP head (null = use rank above)
+  init_method: "xavier"        # Initialization method: "xavier" or "orthogonal"
   use_bias: false              # Use bias in low-rank layers
   
 # Sequence Configuration
@@ -26,7 +29,8 @@ pretrain:
   epochs: 100                  # Number of pre-training epochs
   batch_size: 256              # Batch size for pre-training
   learning_rate: 0.001         # Learning rate
-  weight_decay: 0.0            # L2 regularization
+  weight_decay: 0.0            # L2 regularization for non-low-rank parameters
+  lowrank_weight_decay: 0.01   # L2 regularization for low-rank parameters (U, V matrices)
   adam_beta1: 0.9              # Adam beta1
   adam_beta2: 0.999            # Adam beta2
   
@@ -46,7 +50,8 @@ finetune:
   epochs: 50                   # Number of fine-tuning epochs
   batch_size: 256              # Batch size for fine-tuning
   learning_rate: 0.001         # Learning rate
-  weight_decay: 0.0            # L2 regularization
+  weight_decay: 0.0            # L2 regularization for non-low-rank parameters
+  lowrank_weight_decay: 0.01   # L2 regularization for low-rank parameters (U, V matrices)
   adam_beta1: 0.9              # Adam beta1
   adam_beta2: 0.999            # Adam beta2
   log_freq: 1                  # Log every N epochs

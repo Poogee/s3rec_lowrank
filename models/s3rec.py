@@ -371,7 +371,10 @@ class S3RecLowRankModel(S3RecModel):
     W_AAP ≈ U·V^T where U,V ∈ R^(d×r) with r << d
     
     Args:
-        rank: Low-rank dimension for AAP/MAP heads
+        rank: Low-rank dimension for AAP/MAP heads (used if aap_rank/map_rank not specified)
+        aap_rank: Low-rank dimension for AAP head (overrides rank if specified)
+        map_rank: Low-rank dimension for MAP head (overrides rank if specified)
+        lowrank_init_method: Initialization method for low-rank matrices ("xavier" or "orthogonal")
         **kwargs: Arguments passed to S3RecModel
     """
     
@@ -386,7 +389,10 @@ class S3RecLowRankModel(S3RecModel):
         dropout: float = 0.2,
         hidden_act: str = "gelu",
         initializer_range: float = 0.02,
-        rank: int = 16
+        rank: int = 16,
+        aap_rank: Optional[int] = None,
+        map_rank: Optional[int] = None,
+        lowrank_init_method: str = "xavier"
     ):
         # Initialize base model
         super().__init__(
@@ -401,19 +407,26 @@ class S3RecLowRankModel(S3RecModel):
             initializer_range=initializer_range
         )
         
-        self.rank = rank
+        # Use provided ranks or fallback to rank for backward compatibility
+        self.aap_rank = aap_rank if aap_rank is not None else rank
+        self.map_rank = map_rank if map_rank is not None else rank
+        self.rank = rank  # Keep for backward compatibility
+        self.lowrank_init_method = lowrank_init_method
         
-        # Replace with low-rank AAP heads
-        self.aap_head = LowRankAAP(hidden_size, rank)
-        self.map_head = LowRankAAP(hidden_size, rank)
+        # Replace with low-rank AAP heads (can have different ranks)
+        self.aap_head = LowRankAAP(hidden_size, self.aap_rank, init_method=lowrank_init_method)
+        self.map_head = LowRankAAP(hidden_size, self.map_rank, init_method=lowrank_init_method)
         
     def get_aap_analysis(self) -> Dict:
         """Get analysis of AAP low-rank factorization."""
         return {
             'aap': self.aap_head.get_parameter_count(),
             'map': self.map_head.get_parameter_count(),
-            'rank': self.rank,
-            'hidden_size': self.hidden_size
+            'aap_rank': self.aap_rank,
+            'map_rank': self.map_rank,
+            'rank': self.rank,  # For backward compatibility
+            'hidden_size': self.hidden_size,
+            'init_method': self.lowrank_init_method
         }
     
     def reconstruct_aap_weights(self) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -465,7 +478,9 @@ class S3RecLowRankModel(S3RecModel):
             'reduction': (full_total - lowrank_params['total']) / full_total,
             'reduction_percent': f"{(full_total - lowrank_params['total']) / full_total * 100:.2f}%",
             'aap_reduction': f"{(full_aap_params - lowrank_aap) / full_aap_params * 100:.2f}%",
-            'rank': self.rank
+            'aap_rank': self.aap_rank,
+            'map_rank': self.map_rank,
+            'rank': self.rank  # For backward compatibility
         }
 
 
@@ -490,6 +505,12 @@ def create_model(
     
     if use_lowrank:
         lowrank_config = config.get('lowrank', {})
+        # Support different ranks for AAP and MAP
+        rank = lowrank_config.get('rank', 16)  # Default/backward compatibility
+        aap_rank = lowrank_config.get('aap_rank', None)  # None means use rank
+        map_rank = lowrank_config.get('map_rank', None)  # None means use rank
+        init_method = lowrank_config.get('init_method', 'xavier')  # 'xavier' or 'orthogonal'
+        
         return S3RecLowRankModel(
             num_items=num_items,
             num_attributes=num_attributes,
@@ -500,7 +521,10 @@ def create_model(
             dropout=model_config.get('dropout', 0.2),
             hidden_act=model_config.get('hidden_act', 'gelu'),
             initializer_range=model_config.get('initializer_range', 0.02),
-            rank=lowrank_config.get('rank', 16)
+            rank=rank,
+            aap_rank=aap_rank,
+            map_rank=map_rank,
+            lowrank_init_method=init_method
         )
     else:
         return S3RecModel(

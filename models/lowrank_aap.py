@@ -53,29 +53,37 @@ class LowRankAAP(nn.Module):
         self,
         hidden_size: int,
         rank: int,
-        use_bias: bool = False
+        use_bias: bool = False,
+        init_method: str = "xavier"
     ):
         super().__init__()
         
         assert rank < hidden_size, f"Rank {rank} must be less than hidden_size {hidden_size}"
+        assert init_method in ["xavier", "orthogonal"], f"Unknown init_method: {init_method}"
         
         self.hidden_size = hidden_size
         self.rank = rank
         self.use_bias = use_bias
+        self.init_method = init_method
         
         # Low-rank factors
         self.U = nn.Linear(hidden_size, rank, bias=use_bias)
         self.V = nn.Linear(hidden_size, rank, bias=use_bias)
         
-        # Initialize with Xavier/Glorot for better gradient flow
+        # Initialize weights
         self._init_weights()
         
     def _init_weights(self):
-        """Initialize weights with scaled Xavier initialization."""
-        # Scale by 1/sqrt(rank) to maintain variance
-        scale = 1.0 / math.sqrt(self.rank)
-        nn.init.xavier_uniform_(self.U.weight, gain=scale)
-        nn.init.xavier_uniform_(self.V.weight, gain=scale)
+        """Initialize weights with specified method."""
+        if self.init_method == "orthogonal":
+            # Orthogonal initialization for better numerical stability
+            nn.init.orthogonal_(self.U.weight)
+            nn.init.orthogonal_(self.V.weight)
+        else:  # xavier (default)
+            # Scale by 1/sqrt(rank) to maintain variance
+            scale = 1.0 / math.sqrt(self.rank)
+            nn.init.xavier_uniform_(self.U.weight, gain=scale)
+            nn.init.xavier_uniform_(self.V.weight, gain=scale)
         
         if self.use_bias:
             nn.init.zeros_(self.U.bias)
@@ -161,7 +169,7 @@ class LowRankAAP(nn.Module):
         return error.item()
     
     def extra_repr(self) -> str:
-        return f'hidden_size={self.hidden_size}, rank={self.rank}, use_bias={self.use_bias}'
+        return f'hidden_size={self.hidden_size}, rank={self.rank}, use_bias={self.use_bias}, init={self.init_method}'
 
 
 class FullRankAAP(nn.Module):
