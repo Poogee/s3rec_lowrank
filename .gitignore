@@ -1,0 +1,47 @@
+# Python bytecode (мусор)
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.cursor/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Distribution
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large data files (опционально - раскомментируй если не хочешь хранить данные)
+# data/processed/*.pkl
+# data/raw/
+
+# TensorBoard events
+events.out.tfevents.*
+
+# Временные файлы
+*.tmp
+*.temp
+
